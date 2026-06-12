@@ -1,0 +1,2375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto-Scrabble — Multi-player Turn-based Cipher Game</title>
+  <!-- SEO & Fonts & PeerJS CDN -->
+  <meta name="description" content="An interactive cryptographic Scrabble game for two players featuring a 15x15 board, real-time previews, collision checks, 3D card-flip cipher toggling, and online P2P multiplayer.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <!-- Google AdSense (REPLACE ca-pub-1234567890123456 WITH YOUR ADSENSE PUBLISHER ID) -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1234567890123456" crossorigin="anonymous"></script>
+  
+  <style>
+    /* Design Tokens */
+    :root {
+      --bg-dark: #070a13;
+      --bg-card: #0f1626;
+      --bg-input: #17223b;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      
+      /* Multiplier Colors */
+      --color-tw: #ef4444; /* Triple Word: Red */
+      --color-dw: #ec4899; /* Double Word: Pink */
+      --color-tl: #1d4ed8; /* Triple Letter: Blue */
+      --color-dl: #3b82f6; /* Double Letter: Light Blue */
+      --color-star: #eab308; /* Center Star: Gold */
+      
+      --primary: #f97316; /* Vibrant Orange */
+      --primary-glow: rgba(249, 115, 22, 0.4);
+      --secondary: #3b82f6; /* Slate Blue */
+      --secondary-glow: rgba(59, 130, 246, 0.4);
+      --accent-green: #10b981;
+      --border-color: #1e293b;
+      
+      --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --transition-speed: 0.3s;
+    }
+
+    /* Base Styling */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(249, 115, 22, 0.04) 0%, transparent 45%),
+        radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 45%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1280px;
+      perspective: 1200px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      box-shadow: 0 15px 45px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--secondary), var(--primary));
+    }
+
+    .screen {
+      display: none;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity var(--transition-speed) ease, transform var(--transition-speed) ease;
+    }
+
+    .screen.active {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 70%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.05em;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    /* Lobby tab buttons */
+    .lobby-tabs button {
+      transition: all var(--transition-speed);
+    }
+    .lobby-tabs button.active {
+      background: var(--bg-card) !important;
+      color: var(--text-main) !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .lobby-panel {
+      display: none;
+      opacity: 0;
+      transition: opacity var(--transition-speed) ease;
+    }
+    .lobby-panel.active {
+      display: flex;
+      flex-direction: column;
+      opacity: 1;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .input-group label {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+    }
+
+    .input-control {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      outline: none;
+      transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+      font-family: var(--font-sans);
+    }
+
+    .input-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    /* Buttons */
+    .btn {
+      background: linear-gradient(135deg, var(--primary), #ea580c);
+      color: white;
+      border: none;
+      padding: 1rem 2rem;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all var(--transition-speed) cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 4px 14px var(--primary-glow);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px var(--primary-glow), 0 0 30px rgba(249, 115, 22, 0.25);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      background: #273549;
+      color: #64748b;
+      box-shadow: none;
+      cursor: not-allowed;
+      border: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      box-shadow: none;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-main);
+      border-color: var(--text-muted);
+      box-shadow: none;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-danger:hover {
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+    }
+
+    /* Main Game Layout split columns */
+    .game-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 600px) 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    /* Left Column: Board and Visual Toggle */
+    .board-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .board-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      padding: 0.75rem 1.25rem;
+      border-radius: 14px;
+    }
+
+    /* Hacker Switch */
+    .view-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .toggle-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      transition: color var(--transition-speed);
+    }
+
+    .toggle-label.active {
+      color: var(--primary);
+    }
+
+    .toggle-label.active.cipher-label {
+      color: var(--accent-green);
+      text-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 26px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
+      transition: .4s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      border-color: var(--accent-green);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(24px);
+      background-color: var(--accent-green);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+    }
+
+    /* The 15x15 Scrabble Board */
+    .board-container {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #090e18;
+      border: 6px solid #111827;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
+      gap: 2px;
+      padding: 4px;
+      user-select: none;
+    }
+
+    .board-cell {
+      background: #11192e;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      position: relative;
+      cursor: pointer;
+      transition: all var(--transition-speed);
+      border: 1px solid transparent;
+    }
+
+    .board-cell:hover {
+      filter: brightness(1.2);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Cell Multipliers */
+    .cell-tw { background: var(--color-tw); color: #fff; }
+    .cell-dw { background: var(--color-dw); color: #fff; }
+    .cell-tl { background: var(--color-tl); color: #fff; }
+    .cell-dl { background: var(--color-dl); color: #fff; }
+    .cell-star { background: var(--color-star); color: #000; }
+
+    .cell-label {
+      font-size: 0.5rem;
+      line-height: 0.9;
+      text-align: center;
+      opacity: 0.85;
+      pointer-events: none;
+    }
+
+    /* Grid selection states */
+    .board-cell.selected-start {
+      border-color: #22d3ee !important;
+      box-shadow: 0 0 10px #22d3ee;
+      animation: selectPulse 1.5s infinite;
+      z-index: 5;
+    }
+
+    .board-cell.preview-cell {
+      box-shadow: inset 0 0 8px rgba(249, 115, 22, 0.6);
+      border-color: var(--primary) !important;
+      z-index: 2;
+    }
+
+    .board-cell.conflict-cell {
+      background: rgba(239, 68, 68, 0.2) !important;
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 10px #ef4444;
+      animation: alertPulse 1s infinite;
+      z-index: 5;
+    }
+
+    @keyframes selectPulse {
+      0%, 100% { border-color: #22d3ee; box-shadow: 0 0 8px rgba(34, 211, 238, 0.4); }
+      50% { border-color: #06b6d4; box-shadow: 0 0 15px rgba(34, 211, 238, 0.8); }
+    }
+
+    @keyframes alertPulse {
+      0%, 100% { border-color: #ef4444; }
+      50% { border-color: #b91c1c; }
+    }
+
+    /* 3D Tile Flipping CSS */
+    .tile-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      perspective: 600px;
+      border-radius: 4px;
+    }
+
+    .tile-card {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Rotate card when ciphered */
+    .tile-card.ciphered {
+      transform: rotateY(180deg);
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 1; }
+    }
+
+    .tile-face {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    /* Plain Text Front Face */
+    .tile-front {
+      background: linear-gradient(135deg, #fef08a, #eab308);
+      color: #713f12;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .tile-front .tile-score {
+      position: absolute;
+      bottom: 2px;
+      right: 3px;
+      font-size: 0.5rem;
+      font-weight: 800;
+      opacity: 0.9;
+    }
+
+    /* Encrypted Back Face */
+    .tile-back {
+      background: #090d16;
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      transform: rotateY(180deg);
+      text-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+    }
+
+    .tile-back .tile-score {
+      display: none;
+    }
+
+    /* Translucent preview tiles */
+    .preview-tile .tile-front {
+      background: linear-gradient(135deg, rgba(254, 240, 138, 0.6), rgba(234, 179, 8, 0.6));
+      color: rgba(113, 63, 18, 0.7);
+      border: 1px dashed var(--primary);
+    }
+    .preview-tile .tile-back {
+      border: 1px dashed var(--accent-green);
+      opacity: 0.6;
+    }
+
+    /* Right Column CSS */
+    .right-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .game-dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .player-card {
+      background: rgba(19, 27, 46, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      transition: all var(--transition-speed);
+    }
+
+    .player-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: var(--border-color);
+    }
+
+    .player-card.active-p1 {
+      border-color: var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+      background: rgba(249, 115, 22, 0.03);
+    }
+    .player-card.active-p1::after { background: var(--primary); }
+
+    .player-card.active-p2 {
+      border-color: var(--secondary);
+      box-shadow: 0 0 15px var(--secondary-glow);
+      background: rgba(59, 130, 246, 0.03);
+    }
+    .player-card.active-p2::after { background: var(--secondary); }
+
+    .player-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .player-card.active-p1 .player-badge { background: var(--primary); color: #fff; }
+    .player-card.active-p2 .player-badge { background: var(--secondary); color: #fff; }
+
+    .player-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-score {
+      font-size: 2.25rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+    }
+
+    .player-score span {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-left: 0.15rem;
+    }
+
+    /* Word Builder Controls card */
+    .builder-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+
+    .builder-coordinate-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .builder-coord-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .builder-coord-value {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--accent-green);
+      font-size: 1.1rem;
+      background: rgba(16, 185, 129, 0.15);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Horizontal / Vertical Segmented Control */
+    .direction-selector {
+      display: flex;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      padding: 3px;
+      border-radius: 10px;
+      margin-bottom: 1.25rem;
+    }
+
+    .direction-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 7px;
+      transition: all var(--transition-speed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+    }
+
+    .direction-btn.active {
+      background: var(--bg-card);
+      color: var(--text-main);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    .direction-btn.active.dir-horiz { color: var(--primary); }
+    .direction-btn.active.dir-vert { color: var(--secondary); }
+
+    /* Dynamic validations alert info */
+    .validation-alert-box {
+      font-size: 0.8rem;
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 8px;
+      padding: 0.6rem 0.8rem;
+      margin-bottom: 1rem;
+      display: none;
+      font-weight: 600;
+    }
+
+    /* Transmission history log list */
+    .history-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.25rem;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .history-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-main);
+      margin-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .history-count {
+      background: var(--bg-input);
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 9999px;
+      font-family: var(--font-mono);
+    }
+
+    .history-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.75rem;
+      background: rgba(9, 13, 22, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .history-player-badge {
+      font-weight: 700;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin-right: 0.4rem;
+    }
+
+    .hp-1 { background: rgba(249, 115, 22, 0.15); color: var(--primary); }
+    .hp-2 { background: rgba(59, 130, 246, 0.15); color: var(--secondary); }
+
+    .history-words { flex: 1; display: flex; flex-direction: column; }
+    .history-words-orig { font-weight: 600; color: var(--text-main); }
+    .history-words-enc { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-green); }
+    .history-pts { font-family: var(--font-mono); font-weight: 700; color: var(--primary); }
+    .history-empty { color: var(--text-muted); text-align: center; font-style: italic; font-size: 0.85rem; margin: auto; padding: 1rem 0; }
+
+    /* Rules reference list */
+    .rules-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.25rem;
+      font-size: 0.8rem;
+    }
+
+    .rules-title {
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-main);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .rules-list {
+      list-style-type: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      color: var(--text-muted);
+    }
+
+    .rules-list li {
+      position: relative;
+      padding-left: 0.85rem;
+    }
+
+    .rules-list li::before {
+      content: '⚡';
+      position: absolute;
+      left: 0;
+      color: var(--primary);
+    }
+
+    /* Spinner Animation */
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid currentColor;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 2px solid var(--primary);
+      box-shadow: 0 0 35px var(--primary-glow);
+      border-radius: 24px;
+      padding: 2.5rem;
+      text-align: center;
+      max-width: 480px;
+      width: 90%;
+      transform: scale(0.8);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .modal-overlay.active .modal-content {
+      transform: scale(1);
+    }
+
+    .winner-announcement { font-size: 1.1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--primary); margin-bottom: 0.75rem; }
+    .winner-name { font-size: 2.5rem; font-weight: 800; margin-bottom: 1.25rem; color: var(--text-main); }
+    .winner-scores { background: rgba(9, 13, 22, 0.5); border-radius: 12px; padding: 1rem; margin-bottom: 1.75rem; border: 1px solid var(--border-color); }
+    .winner-score-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.95rem; }
+    .winner-score-row:last-child { margin-bottom: 0; }
+    
+    #confetti-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 101;
+    }
+
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Responsive Grid */
+    @media (max-width: 992px) {
+      .game-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+    }
+
+    /* Google Ads Styled Container */
+    .ad-wrapper {
+      margin-top: 1.5rem;
+      background: rgba(15, 22, 38, 0.4);
+      border: 1px dashed var(--border-color);
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+      position: relative;
+      min-height: 90px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .ad-label {
+      position: absolute;
+      top: 4px;
+      left: 8px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+
+    .ad-fallback-content {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    
+    .ad-fallback-content a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .ad-fallback-content a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Disconnected Banner -->
+  <div id="online-banner" style="display:none; background:#ea580c; color:#fff; text-align:center; padding:0.6rem; font-size:0.85rem; font-weight:700; position:fixed; top:0; left:0; width:100%; z-index:1000; border-bottom:1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.3); align-items:center; justify-content:center; gap:0.5rem; flex-wrap:wrap;">
+    <span id="banner-message">⚠ Connection Lost: Opponent disconnected.</span>
+    <div style="display:flex; gap:0.5rem;">
+      <button id="banner-dismiss-btn" style="background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:0.25rem 0.6rem; font-size:0.75rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.02em;">Dismiss & Keep Playing</button>
+      <button id="banner-lobby-btn" style="background:#fff; color:#ea580c; border:none; border-radius:6px; padding:0.25rem 0.6rem; font-size:0.75rem; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.02em;">Return to Lobby</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- SETUP / LOBBY SCREEN -->
+    <div id="setup-screen" class="screen active card">
+      <h1>Crypto-Scrabble</h1>
+      <h2>A Cyberpunk Board Game</h2>
+      <p style="text-align: center; max-width: 600px; margin: 0 auto 1.5rem auto; color: var(--text-muted); line-height: 1.6; font-size: 0.95rem;">
+        Place words on a standard 15x15 Scrabble grid with multiplier rewards. Original letters are shifted by <strong>+3 using a Caesar Cipher</strong>. Toggle plain and cipher grids dynamically!
+      </p>
+
+      <div class="setup-form">
+        <!-- Lobby Mode Tabs -->
+        <div class="lobby-tabs" style="display:flex; background:var(--bg-input); border:1px solid var(--border-color); padding:3px; border-radius:10px; margin-bottom:1.5rem;">
+          <button id="tab-local" class="lobby-tab-btn active" style="flex:1; background:transparent; border:none; color:var(--text-muted); padding:0.6rem; font-size:0.85rem; font-weight:700; text-transform:uppercase; cursor:pointer; border-radius:7px;">Pass & Play</button>
+          <button id="tab-online" class="lobby-tab-btn" style="flex:1; background:transparent; border:none; color:var(--text-muted); padding:0.6rem; font-size:0.85rem; font-weight:700; text-transform:uppercase; cursor:pointer; border-radius:7px;">Online (P2P)</button>
+        </div>
+
+        <!-- Local Pass & Play Panel -->
+        <div id="panel-local" class="lobby-panel active">
+          <div class="input-group" style="margin-bottom:1rem;">
+            <label for="player1-input">Player 1 Name</label>
+            <input type="text" id="player1-input" class="input-control" value="Alice" autocomplete="off">
+          </div>
+          <div class="input-group" style="margin-bottom:1.5rem;">
+            <label for="player2-input">Player 2 Name</label>
+            <input type="text" id="player2-input" class="input-control" value="Bob" autocomplete="off">
+          </div>
+          <button id="start-btn" class="btn" style="width:100%;">Start Local Session</button>
+        </div>
+
+        <!-- Online P2P Panel -->
+        <div id="panel-online" class="lobby-panel">
+          <div class="input-group" style="margin-bottom:1rem;">
+            <label for="online-name-input">Your Name</label>
+            <input type="text" id="online-name-input" class="input-control" value="Player 1" autocomplete="off">
+          </div>
+          
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
+            <button id="host-btn" class="btn">Host Game</button>
+            <button id="join-btn" class="btn btn-secondary">Join Game</button>
+          </div>
+          
+          <!-- Hosting state -->
+          <div id="host-status" style="display:none; text-align:center; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:12px; padding:1.25rem; margin-bottom:1rem;">
+            <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:0.4rem;">Room Code (Share this with Player 2)</div>
+            <div id="host-code-display" style="font-size:2rem; font-weight:800; font-family:var(--font-mono); color:var(--primary); letter-spacing:0.1em; margin-bottom:0.5rem;">-----</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); display:flex; align-items:center; justify-content:center; gap:0.4rem;">
+              <span class="spinner"></span> Waiting for opponent to connect...
+            </div>
+          </div>
+
+          <!-- Joining state -->
+          <div id="join-status" style="display:none; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:12px; padding:1.25rem; flex-direction:column; gap:1rem; margin-bottom:1rem;">
+            <div class="input-group">
+              <label for="join-code-input">Enter 5-Letter Room Code</label>
+              <input type="text" id="join-code-input" class="input-control" placeholder="ABCDE" style="text-transform:uppercase; font-family:var(--font-mono); font-weight:700; letter-spacing:0.1em; text-align:center;" maxlength="5" autocomplete="off">
+            </div>
+            <button id="connect-btn" class="btn" style="width:100%;">Connect & Join</button>
+          </div>
+          
+          <div id="online-error" style="color:#ef4444; font-size:0.85rem; text-align:center; display:none; font-weight:600; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); padding:0.5rem; border-radius:8px;">Connection failed</div>
+        </div>
+      </div>
+
+      <!-- Google Ads Block -->
+      <div class="ad-wrapper" style="margin-top: 2rem;">
+        <span class="ad-label">Sponsor Advertisement</span>
+        <!-- REPLACE data-ad-client AND data-ad-slot WITH YOUR ACTIVE GOOGLE ADSENSE VALUES -->
+        <ins class="adsbygoogle"
+             style="display:block; width:100%; min-height:90px;"
+             data-ad-client="ca-pub-1234567890123456"
+             data-ad-slot="9876543210"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+        <div class="ad-fallback-content">
+          Looking for expert web & crypto development? Hire <a href="mailto:sashika@example.com">Sashika Dasun Wickramarachchi</a>.
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN GAME SCREEN -->
+    <div id="game-screen" class="screen card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+        <h3 style="font-weight:800; font-size: 1.5rem; background: linear-gradient(135deg, #fff, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Crypto-Scrabble</h3>
+        <div style="display:flex; gap: 0.5rem;">
+          <button id="reset-btn" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem;">Reset</button>
+          <button id="end-btn" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.8rem;">End Game</button>
+        </div>
+      </div>
+
+      <div class="game-grid">
+        <!-- Left: The Scrabble Board -->
+        <div class="board-section">
+          <div class="board-header">
+            <span style="font-size: 0.8rem; font-weight:700; text-transform:uppercase; color: var(--text-muted);">Interactive Map Grid</span>
+            <div class="view-toggle">
+              <span id="label-plain" class="toggle-label">Plain</span>
+              <label class="switch">
+                <input type="checkbox" id="view-mode-toggle" checked>
+                <span class="slider"></span>
+              </label>
+              <span id="label-cipher" class="toggle-label active cipher-label">Cipher</span>
+            </div>
+          </div>
+          
+          <div id="board" class="board-container cipher-view">
+            <!-- Will generate 225 grid cells (15x15) dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- Right: Turns, Inputs & Validation -->
+        <div class="right-section">
+          <!-- Active Player Scoreboard -->
+          <div class="game-dashboard">
+            <div id="p1-card" class="player-card">
+              <div class="player-badge">Player 1</div>
+              <div id="p1-name" class="player-name">Alice</div>
+              <div id="p1-score" class="player-score">0<span>PTS</span></div>
+            </div>
+
+            <div id="p2-card" class="player-card">
+              <div class="player-badge">Player 2</div>
+              <div id="p2-name" class="player-name">Bob</div>
+              <div id="p2-score" class="player-score">0<span>PTS</span></div>
+            </div>
+          </div>
+
+          <!-- Turn Timer Bar -->
+          <div id="timer-bar" style="background: rgba(15, 22, 38, 0.8); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.75rem 1.25rem; display: flex; align-items: center; justify-content: space-between; position: relative; overflow: hidden; margin-bottom: 1rem; margin-top: 1rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <span id="timer-pulse" style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); display: inline-block; animation: pulseGlow 1.5s infinite;"></span>
+              <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em;">Transmission Window</span>
+            </div>
+            <span id="turn-timer" style="font-family:var(--font-mono); font-weight:700; color:var(--text-main); font-size:1.35rem; text-shadow:0 0 10px rgba(255,255,255,0.2);">60.0s</span>
+            <div id="timer-progress" style="position: absolute; bottom: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--secondary), var(--primary)); width: 100%; transition: width 0.1s linear;"></div>
+          </div>
+
+          <!-- Selected Cell Word Builder -->
+          <div class="builder-card">
+            <div class="builder-coordinate-row">
+              <div class="builder-coord-label">Start Position</div>
+              <div id="selected-coordinate" class="builder-coord-value">H8 (Star)</div>
+            </div>
+
+            <div class="direction-selector">
+              <button id="dir-horiz" class="direction-btn active dir-horiz">Horizontal ➔</button>
+              <button id="dir-vert" class="direction-btn dir-vert">Vertical ⬇</button>
+            </div>
+
+            <!-- Validation Box alerts -->
+            <div id="validation-alert" class="validation-alert-box">Collision error</div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.5rem;">
+              <div class="builder-coord-label">Enter Word</div>
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div id="validation-status" class="validation-badge val-pending">Awaiting Word</div>
+                <div id="live-points" style="font-weight: 700; color: var(--primary); font-family: var(--font-mono); font-size: 0.95rem;">
+                  Score: <span id="word-score-val">0</span> pts
+                </div>
+              </div>
+            </div>
+
+            <div style="position:relative; margin-bottom: 1.25rem;">
+              <input type="text" id="word-input" class="input-control" placeholder="TYPE LETTERS..." style="width:100%; font-family:var(--font-mono); font-weight:700; letter-spacing:0.1em; text-transform:uppercase;" autocomplete="off">
+            </div>
+
+            <div style="background: rgba(9, 13, 22, 0.4); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem; font-size:0.85rem; margin-bottom: 1.25rem;">
+              <div style="color:var(--text-muted); font-size:0.75rem; text-transform:uppercase; font-weight:700; margin-bottom:0.25rem;">Caesar Cipher ROT-3 Translation</div>
+              <div id="cipher-output" style="font-family:var(--font-mono); font-size:1.4rem; color:var(--accent-green); font-weight:700; letter-spacing:0.1em; min-height: 2rem; display:flex; align-items:center; text-shadow: 0 0 6px rgba(16, 185, 129, 0.3);">AWAITING INPUT...</div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 0.75rem;">
+              <button id="submit-btn" class="btn" disabled>Submit Word</button>
+              <button id="clear-btn" class="btn btn-secondary">Clear</button>
+            </div>
+          </div>
+
+          <!-- Logs & Timeline -->
+          <div class="history-card">
+            <div class="history-title">
+              <span>Transmission Log</span>
+              <span id="history-badge" class="history-count">0</span>
+            </div>
+            <div id="history-container">
+              <ul id="history-list" class="history-list">
+                <li class="history-empty">No transmissions sent yet.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Short Rules -->
+          <div class="rules-card">
+            <div class="rules-title">📜 Board Instructions</div>
+            <ul class="rules-list">
+              <li>Click any cell on the board to select your start coordinates.</li>
+              <li>Toggle directions (horizontal/vertical) and type letters.</li>
+              <li>Reused letter tiles do not re-apply multipliers.</li>
+              <li>Toggle Plain/Cipher view to check encrypted coordinates live.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Google Ads Block -->
+      <div class="ad-wrapper" style="margin-top: 2rem;">
+        <span class="ad-label">Sponsor Advertisement</span>
+        <!-- REPLACE data-ad-client AND data-ad-slot WITH YOUR ACTIVE GOOGLE ADSENSE VALUES -->
+        <ins class="adsbygoogle"
+             style="display:block; width:100%; min-height:90px;"
+             data-ad-client="ca-pub-1234567890123456"
+             data-ad-slot="9876543211"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+        <div class="ad-fallback-content">
+          Looking for expert web & crypto development? Hire <a href="mailto:sashika@example.com">Sashika Dasun Wickramarachchi</a>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WINNER OVERLAY MODAL -->
+  <div id="winner-modal" class="modal-overlay">
+    <canvas id="confetti-canvas"></canvas>
+    <div class="modal-content">
+      <div class="winner-announcement">🏆 Session Completed</div>
+      <div id="winner-heading" class="winner-name">ALICE WINS!</div>
+      
+      <div class="winner-scores">
+        <div class="winner-score-row">
+          <span id="winner-lbl-1" style="font-weight: 600;">Alice:</span>
+          <span id="winner-val-1" style="font-family: var(--font-mono); font-weight:700;">0 PTS</span>
+        </div>
+        <div class="winner-score-row">
+          <span id="winner-lbl-2" style="font-weight: 600;">Bob:</span>
+          <span id="winner-val-2" style="font-family: var(--font-mono); font-weight:700;">0 PTS</span>
+        </div>
+      </div>
+
+      <button id="rematch-btn" class="btn" style="width: 100%;">Initialize New Session</button>
+    </div>
+  </div>
+
+  <footer>
+    Crypto-Scrabble &copy; 2026. Developed by Sashika Dasun Wickramarachchi. Built with pure Vanilla JS.
+  </footer>
+
+  <!-- Native JavaScript Logic -->
+  <script>
+    // Scrabble points map
+    const SCRABBLE_VALUES = {
+      A: 1, B: 3, C: 3, D: 2, E: 1, F: 4, G: 2, H: 4, I: 1, J: 8, K: 5, L: 1, M: 3,
+      N: 1, O: 1, P: 3, Q: 10, R: 1, S: 1, T: 1, U: 1, V: 4, W: 4, X: 8, Y: 4, Z: 10
+    };
+
+    // Standard Board layout coordinates
+    const MULTIPLIERS = {
+      tw: [
+        [0,0], [0,7], [0,14],
+        [7,0],         [7,14],
+        [14,0], [14,7], [14,14]
+      ],
+      dw: [
+        [1,1], [2,2], [3,3], [4,4],
+        [10,10], [11,11], [12,12], [13,13],
+        [1,13], [2,12], [3,11], [4,10],
+        [13,1], [12,2], [11,3], [10,4]
+      ],
+      tl: [
+        [1,5], [1,9],
+        [5,1], [5,5], [5,9], [5,13],
+        [9,1], [9,5], [9,9], [9,13],
+        [13,5], [13,9]
+      ],
+      dl: [
+        [0,3], [0,11],
+        [2,6], [2,8],
+        [3,0], [3,7], [3,14],
+        [6,2], [6,6], [6,8], [6,12],
+        [7,3], [7,11],
+        [8,2], [8,6], [8,8], [8,12],
+        [11,0], [11,7], [11,14],
+        [12,6], [12,8],
+        [14,3], [14,11]
+      ]
+    };
+
+    // Board cell type lookups
+    function getCellType(r, c) {
+      if (r === 7 && c === 7) return 'star';
+      if (MULTIPLIERS.tw.some(([row, col]) => row === r && col === c)) return 'tw';
+      if (MULTIPLIERS.dw.some(([row, col]) => row === r && col === c)) return 'dw';
+      if (MULTIPLIERS.tl.some(([row, col]) => row === r && col === c)) return 'tl';
+      if (MULTIPLIERS.dl.some(([row, col]) => row === r && col === c)) return 'dl';
+      return 'standard';
+    }
+
+    // State Variables
+    const state = {
+      player1: { name: 'Alice', score: 0 },
+      player2: { name: 'Bob', score: 0 },
+      activePlayer: 1, // 1 or 2
+      history: [],
+      // Grid letter database stores elements as { letter: char, isPermanent: bool, placedBy: num }
+      grid: Array(15).fill(null).map(() => Array(15).fill(null)),
+      selectedCell: { row: 7, col: 7 }, // H8 center by default
+      direction: 'horizontal', // 'horizontal' or 'vertical'
+      currentWordPoints: 0,
+      currentEncryptedWord: '',
+      isValidating: false,
+      isWordValid: false,
+      hasCollisionOrBoundaryError: false,
+      
+      // Turn Timer
+      timerValue: 60,
+      timerInterval: null,
+
+      // Multiplayer network state
+      isMultiplayer: false,
+      myRole: 'local', // 'local', 'host' (Player 1), 'joiner' (Player 2)
+      peer: null,
+      conn: null
+    };
+
+    // Elements
+    const setupScreen = document.getElementById('setup-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const winnerModal = document.getElementById('winner-modal');
+
+    // Lobby tabs & panels
+    const tabLocal = document.getElementById('tab-local');
+    const tabOnline = document.getElementById('tab-online');
+    const panelLocal = document.getElementById('panel-local');
+    const panelOnline = document.getElementById('panel-online');
+    
+    // Setup inputs local
+    const player1Input = document.getElementById('player1-input');
+    const player2Input = document.getElementById('player2-input');
+    const startBtn = document.getElementById('start-btn');
+
+    // Setup inputs online
+    const onlineNameInput = document.getElementById('online-name-input');
+    const hostBtn = document.getElementById('host-btn');
+    const joinBtn = document.getElementById('join-btn');
+    const hostStatus = document.getElementById('host-status');
+    const hostCodeDisplay = document.getElementById('host-code-display');
+    const joinStatus = document.getElementById('join-status');
+    const joinCodeInput = document.getElementById('join-code-input');
+    const connectBtn = document.getElementById('connect-btn');
+    const onlineError = document.getElementById('online-error');
+    const onlineBanner = document.getElementById('online-banner');
+    const bannerLobbyBtn = document.getElementById('banner-lobby-btn');
+    const bannerDismissBtn = document.getElementById('banner-dismiss-btn');
+    const bannerMessage = document.getElementById('banner-message');
+    const turnTimerEl = document.getElementById('turn-timer');
+    const timerProgressEl = document.getElementById('timer-progress');
+    const timerPulseEl = document.getElementById('timer-pulse');
+
+    const p1Card = document.getElementById('p1-card');
+    const p2Card = document.getElementById('p2-card');
+    const p1Name = document.getElementById('p1-name');
+    const p2Name = document.getElementById('p2-name');
+    const p1Score = document.getElementById('p1-score');
+    const p2Score = document.getElementById('p2-score');
+
+    const boardEl = document.getElementById('board');
+    const viewModeToggle = document.getElementById('view-mode-toggle');
+    const labelPlain = document.getElementById('label-plain');
+    const labelCipher = document.getElementById('label-cipher');
+
+    const selectedCoordinateEl = document.getElementById('selected-coordinate');
+    const dirHorizBtn = document.getElementById('dir-horiz');
+    const dirVertBtn = document.getElementById('dir-vert');
+    const validationAlertEl = document.getElementById('validation-alert');
+
+    const wordInput = document.getElementById('word-input');
+    const wordScoreVal = document.getElementById('word-score-val');
+    const cipherOutput = document.getElementById('cipher-output');
+
+    const submitBtn = document.getElementById('submit-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const endBtn = document.getElementById('end-btn');
+    const rematchBtn = document.getElementById('rematch-btn');
+
+    const historyList = document.getElementById('history-list');
+    const historyBadge = document.getElementById('history-badge');
+
+    const winnerHeading = document.getElementById('winner-heading');
+    const winnerLbl1 = document.getElementById('winner-lbl-1');
+    const winnerVal1 = document.getElementById('winner-val-1');
+    const winnerLbl2 = document.getElementById('winner-lbl-2');
+    const winnerVal2 = document.getElementById('winner-val-2');
+
+    // Confetti canvas setup
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    let confettiActive = false;
+    let particles = [];
+    const colors = ['#f97316', '#3b82f6', '#10b981', '#facc15', '#ec4899', '#8b5cf6'];
+
+    // Setup screen lobby navigation tabs
+    tabLocal.addEventListener('click', () => {
+      tabLocal.classList.add('active');
+      tabOnline.classList.remove('active');
+      panelLocal.classList.add('active');
+      panelOnline.classList.remove('active');
+      onlineError.style.display = 'none';
+      cleanupNetwork();
+    });
+
+    tabOnline.addEventListener('click', () => {
+      if (!window.Peer) {
+        onlineError.textContent = 'Multiplayer script library failed to load. Check internet connection.';
+        onlineError.style.display = 'block';
+        return;
+      }
+      tabLocal.classList.remove('active');
+      tabOnline.classList.add('active');
+      panelLocal.classList.remove('active');
+      panelOnline.classList.add('active');
+      onlineError.style.display = 'none';
+    });
+
+    // Multiplayer Networking - Host pairing
+    hostBtn.addEventListener('click', () => {
+      onlineError.style.display = 'none';
+      joinStatus.style.display = 'none';
+      hostStatus.style.display = 'block';
+      
+      cleanupNetwork();
+      
+      // Generate 5-letter Room Code
+      const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+      hostCodeDisplay.textContent = code;
+      
+      state.myRole = 'host';
+      state.peer = new Peer('crypto-scrabble-' + code);
+      
+      state.peer.on('open', () => {
+        console.log('Server open. Peer ID:', state.peer.id);
+      });
+      
+      state.peer.on('connection', (conn) => {
+        state.conn = conn;
+        setupMultiplayerConnection();
+      });
+
+      state.peer.on('error', (err) => {
+        console.error('Peer error:', err);
+        onlineError.textContent = 'Failed to create host room. Please try again.';
+        onlineError.style.display = 'block';
+        hostStatus.style.display = 'none';
+      });
+    });
+
+    // Multiplayer Networking - Join input trigger
+    joinBtn.addEventListener('click', () => {
+      onlineError.style.display = 'none';
+      hostStatus.style.display = 'none';
+      joinStatus.style.display = 'flex';
+      joinCodeInput.focus();
+    });
+
+    // Multiplayer Networking - Join connect trigger
+    connectBtn.addEventListener('click', () => {
+      const code = joinCodeInput.value.trim().toUpperCase();
+      const name = onlineNameInput.value.trim();
+      
+      if (!code || code.length !== 5) {
+        onlineError.textContent = 'Please enter a valid 5-letter code.';
+        onlineError.style.display = 'block';
+        return;
+      }
+      
+      onlineError.style.display = 'none';
+      cleanupNetwork();
+      
+      state.myRole = 'joiner';
+      state.peer = new Peer(); // Client gets random ID
+      
+      state.peer.on('open', () => {
+        console.log('Client open. Connecting to room:', code);
+        state.conn = state.peer.connect('crypto-scrabble-' + code);
+        setupMultiplayerConnection();
+      });
+
+      state.peer.on('error', (err) => {
+        console.error('Peer join error:', err);
+        onlineError.textContent = 'Room connection failed. Check code or room availability.';
+        onlineError.style.display = 'block';
+      });
+    });
+
+    function setupMultiplayerConnection() {
+      // Handlers for data exchanges
+      state.conn.on('open', () => {
+        console.log('Data connection established.');
+        state.isMultiplayer = true;
+        
+        // Handshake player name to opponent
+        state.conn.send({
+          type: 'handshake',
+          name: onlineNameInput.value.trim() || (state.myRole === 'host' ? 'Host' : 'Guest')
+        });
+      });
+
+      state.conn.on('data', (data) => {
+        console.log('Net Packet Recv:', data.type, data);
+        
+        if (data.type === 'handshake') {
+          if (state.myRole === 'host') {
+            // Host assigns names and initial state
+            state.player1.name = onlineNameInput.value.trim() || 'Host';
+            state.player2.name = data.name;
+            state.player1.score = 0;
+            state.player2.score = 0;
+            state.activePlayer = 1;
+            state.history = [];
+            state.grid = Array(15).fill(null).map(() => Array(15).fill(null));
+            state.selectedCell = { row: 7, col: 7 };
+            state.direction = 'horizontal';
+
+            // Send full initial game parameters to Joiner
+            state.conn.send({
+              type: 'init-game',
+              player1Name: state.player1.name,
+              player2Name: state.player2.name
+            });
+
+            // Start locally
+            startOnlineGame();
+          }
+        } 
+        else if (data.type === 'init-game') {
+          // Joiner gets setup parameters
+          state.player1.name = data.player1Name;
+          state.player2.name = data.player2Name;
+          state.player1.score = 0;
+          state.player2.score = 0;
+          state.activePlayer = 1;
+          state.history = [];
+          state.grid = Array(15).fill(null).map(() => Array(15).fill(null));
+          state.selectedCell = { row: 7, col: 7 };
+          state.direction = 'horizontal';
+
+          startOnlineGame();
+        }
+        else if (data.type === 'preview') {
+          // Sync typing previews on opponent board
+          state.direction = data.direction;
+          state.selectedCell = data.selectedCell;
+          
+          // Re-render coordinate displays visually
+          const colLetter = String.fromCharCode(65 + data.selectedCell.col);
+          selectedCoordinateEl.textContent = `${colLetter}${data.selectedCell.row + 1}`;
+          
+          if (data.direction === 'horizontal') {
+            dirHorizBtn.classList.add('active');
+            dirVertBtn.classList.remove('active');
+          } else {
+            dirHorizBtn.classList.remove('active');
+            dirVertBtn.classList.add('active');
+          }
+
+          processWord(data.word, true); // True skips local broadcast triggers
+        }
+        else if (data.type === 'sync-state') {
+          // Update game board states
+          state.grid = data.grid;
+          state.player1.score = data.player1Score;
+          state.player2.score = data.player2Score;
+          state.activePlayer = data.activePlayer;
+          state.history = data.history;
+
+          // Clear builder local previews
+          wordInput.value = '';
+          processWord('');
+          updateValidationUI('pending');
+          updateSubmitState();
+
+          renderBoardGrid();
+          updateUI();
+          wordInput.focus();
+          startTurnTimer();
+        }
+        else if (data.type === 'game-reset') {
+          // Remote reset triggered
+          state.player1.score = 0;
+          state.player2.score = 0;
+          state.activePlayer = 1;
+          state.history = [];
+          state.grid = Array(15).fill(null).map(() => Array(15).fill(null));
+          state.selectedCell = { row: 7, col: 7 };
+          wordInput.value = '';
+          initBoard();
+          handleCellClick(7, 7);
+          updateUI();
+          startTurnTimer();
+        }
+        else if (data.type === 'game-over') {
+          // Remote end-game triggered
+          announceWinner(true); // skips broad target loop
+        }
+        else if (data.type === 'opponent-disconnect') {
+          handleDisconnection();
+        }
+      });
+
+      state.conn.on('close', () => {
+        handleDisconnection();
+      });
+
+      state.conn.on('error', (err) => {
+        console.error('Connection error:', err);
+        handleDisconnection();
+      });
+    }
+
+    function cleanupNetwork() {
+      stopTurnTimer();
+      if (state.conn) {
+        try {
+          state.conn.send({ type: 'opponent-disconnect' });
+        } catch (err) {
+          console.error("Error sending disconnect message:", err);
+        }
+        state.conn.close();
+        state.conn = null;
+      }
+      if (state.peer) {
+        state.peer.destroy();
+        state.peer = null;
+      }
+      state.isMultiplayer = false;
+      state.myRole = 'local';
+      onlineBanner.style.display = 'none';
+    }
+
+    function startOnlineGame() {
+      initBoard();
+      handleCellClick(7, 7);
+      updateUI();
+      transitionScreens(setupScreen, gameScreen);
+      startTurnTimer();
+    }
+
+    function handleDisconnection() {
+      if (state.isMultiplayer) {
+        state.isMultiplayer = false;
+        if (bannerMessage) {
+          bannerMessage.textContent = "⚠ Connection Lost: Opponent disconnected. Switched to local Pass & Play mode.";
+        }
+        onlineBanner.style.display = 'flex';
+        updateUI();
+        startTurnTimer();
+      }
+    }
+
+    bannerLobbyBtn.addEventListener('click', () => {
+      cleanupNetwork();
+      transitionScreens(gameScreen, setupScreen);
+    });
+
+    if (bannerDismissBtn) {
+      bannerDismissBtn.addEventListener('click', () => {
+        onlineBanner.style.display = 'none';
+      });
+    }
+
+    // Helper to evaluate if it is currently our device's turn
+    function isMyTurn() {
+      if (!state.isMultiplayer) return true; // Local play allows everyone to type
+      if (state.myRole === 'host' && state.activePlayer === 1) return true;
+      if (state.myRole === 'joiner' && state.activePlayer === 2) return true;
+      return false;
+    }
+
+    // Helper to identify if a given player is the relevant local user for decryption
+    function isRelevantPlayer(playerIndex) {
+      if (state.isMultiplayer) {
+        if (state.myRole === 'host') return playerIndex === 1;
+        if (state.myRole === 'joiner') return playerIndex === 2;
+      }
+      // Local pass & play: current active player is the relevant player
+      return playerIndex === state.activePlayer;
+    }
+
+    // Setup board elements once
+    function initBoard() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < 15; r++) {
+        for (let c = 0; c < 15; c++) {
+          const type = getCellType(r, c);
+          const cell = document.createElement('div');
+          cell.className = `board-cell cell-${type}`;
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          
+          let labelText = '';
+          if (type === 'tw') labelText = 'TW';
+          else if (type === 'dw') labelText = 'DW';
+          else if (type === 'tl') labelText = 'TL';
+          else if (type === 'dl') labelText = 'DL';
+          else if (type === 'star') labelText = '★';
+          
+          if (labelText) {
+            const labelEl = document.createElement('span');
+            labelEl.className = 'cell-label';
+            labelEl.innerText = labelText;
+            cell.appendChild(labelEl);
+          }
+          
+          cell.addEventListener('click', () => {
+            if (!isMyTurn()) return; // Lock selections if it is not our turn
+            handleCellClick(r, c);
+          });
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    function handleCellClick(row, col) {
+      state.selectedCell = { row, col };
+      
+      const colLetter = String.fromCharCode(65 + col);
+      const rowLabel = row + 1;
+      const type = getCellType(row, col);
+      let typeText = '';
+      if (type === 'tw') typeText = ' (Triple Word)';
+      else if (type === 'dw') typeText = ' (Double Word)';
+      else if (type === 'tl') typeText = ' (Triple Letter)';
+      else if (type === 'dl') typeText = ' (Double Letter)';
+      else if (type === 'star') typeText = ' (Star)';
+      
+      selectedCoordinateEl.textContent = `${colLetter}${rowLabel}${typeText}`;
+      
+      renderBoardGrid();
+      processWord(wordInput.value);
+      wordInput.focus();
+    }
+
+    function renderBoardGrid() {
+      const cells = boardEl.querySelectorAll('.board-cell');
+      cells.forEach(cell => {
+        const r = parseInt(cell.dataset.row);
+        const c = parseInt(cell.dataset.col);
+        
+        cell.classList.remove('selected-start', 'preview-cell', 'conflict-cell');
+        
+        const tileWrapper = cell.querySelector('.tile-wrapper');
+        if (tileWrapper) {
+          cell.removeChild(tileWrapper);
+        }
+        
+        if (state.selectedCell && state.selectedCell.row === r && state.selectedCell.col === c) {
+          cell.classList.add('selected-start');
+        }
+        
+        const item = state.grid[r][c];
+        if (item) {
+          const letter = item.letter;
+          const cipherText = String.fromCharCode(((letter.charCodeAt(0) - 65 + 3) % 26) + 65);
+          const score = SCRABBLE_VALUES[letter] || 0;
+          
+          // Determine if this tile card should be ciphered (flipped to back face)
+          const isCipher = viewModeToggle.checked;
+          const isRelevant = item.placedBy ? isRelevantPlayer(item.placedBy) : false;
+          const shouldCipher = isCipher || !isRelevant;
+          const cipheredClass = shouldCipher ? ' ciphered' : '';
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'tile-wrapper';
+          wrapper.innerHTML = `
+            <div class="tile-card${cipheredClass}">
+              <div class="tile-face tile-front">
+                ${letter}
+                <span class="tile-score">${score}</span>
+              </div>
+              <div class="tile-face tile-back">${cipherText}</div>
+            </div>
+          `;
+          cell.appendChild(wrapper);
+        }
+      });
+    }
+
+    // Toggle board view
+    viewModeToggle.addEventListener('change', () => {
+      const isCipher = viewModeToggle.checked;
+      if (isCipher) {
+        boardEl.classList.add('cipher-view');
+        labelPlain.classList.remove('active');
+        labelCipher.classList.add('active', 'cipher-label');
+      } else {
+        boardEl.classList.remove('cipher-view');
+        labelPlain.classList.add('active');
+        labelCipher.classList.remove('active', 'cipher-label');
+      }
+      renderBoardGrid();
+      processWord(wordInput.value);
+    });
+
+    // Segmented directions button togglers
+    dirHorizBtn.addEventListener('click', () => {
+      if (!isMyTurn()) return;
+      state.direction = 'horizontal';
+      dirHorizBtn.classList.add('active');
+      dirVertBtn.classList.remove('active');
+      processWord(wordInput.value);
+    });
+
+    dirVertBtn.addEventListener('click', () => {
+      if (!isMyTurn()) return;
+      state.direction = 'vertical';
+      dirHorizBtn.classList.remove('active');
+      dirVertBtn.classList.add('active');
+      processWord(wordInput.value);
+    });
+
+    // Update validation status badge visual UI
+    function updateValidationUI(status) {
+      const valBadge = document.getElementById('validation-status');
+      if (!valBadge) return;
+      valBadge.className = 'validation-badge';
+      
+      if (status === 'pending') {
+        valBadge.classList.add('val-pending');
+        valBadge.innerHTML = 'Awaiting Word';
+      } else if (status === 'checking') {
+        valBadge.classList.add('val-checking');
+        valBadge.innerHTML = '<span class="spinner"></span> Checking';
+      } else if (status === 'valid') {
+        valBadge.classList.add('val-valid');
+        valBadge.innerHTML = 'Valid Word ✓';
+      } else if (status === 'invalid') {
+        valBadge.classList.add('val-invalid');
+        valBadge.innerHTML = 'Invalid Word ✗';
+      } else if (status === 'offline') {
+        valBadge.classList.add('val-offline');
+        valBadge.innerHTML = 'Valid (Offline) ⚠';
+      }
+    }
+
+    // Fetch validation from English dictionary API
+    async function verifyWordAPI(word) {
+      if (!word) return;
+      state.isValidating = true;
+      updateValidationUI('checking');
+      updateSubmitState();
+      
+      try {
+        const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
+        if (wordInput.value !== word) return;
+
+        if (res.ok) {
+          state.isWordValid = true;
+          updateValidationUI('valid');
+        } else {
+          state.isWordValid = false;
+          updateValidationUI('invalid');
+        }
+      } catch (err) {
+        console.error("Dictionary API offline", err);
+        if (wordInput.value !== word) return;
+        state.isWordValid = true;
+        updateValidationUI('offline');
+      } finally {
+        if (wordInput.value === word) {
+          state.isValidating = false;
+          updateSubmitState();
+        }
+      }
+    }
+
+    // Toggle submit button state depending on validity
+    function updateSubmitState() {
+      const word = wordInput.value;
+      if (!word || state.hasCollisionOrBoundaryError || state.isValidating || !isMyTurn()) {
+        submitBtn.disabled = true;
+        return;
+      }
+      submitBtn.disabled = !state.isWordValid;
+    }
+
+    // Word Sanitization & Calculations
+    let validationTimeout = null;
+    wordInput.addEventListener('input', (e) => {
+      if (!isMyTurn()) return;
+      
+      let cursorPosition = e.target.selectionStart;
+      const originalValue = e.target.value;
+      const sanitized = originalValue.toUpperCase().replace(/[^A-Z]/g, '');
+      let cleanedBeforeCursor = originalValue.substring(0, cursorPosition).toUpperCase().replace(/[^A-Z]/g, '');
+      
+      e.target.value = sanitized;
+      e.target.setSelectionRange(cleanedBeforeCursor.length, cleanedBeforeCursor.length);
+
+      processWord(sanitized);
+
+      clearTimeout(validationTimeout);
+      if (sanitized.length === 0) {
+        state.isWordValid = false;
+        state.isValidating = false;
+        updateValidationUI('pending');
+        updateSubmitState();
+      } else {
+        state.isValidating = true;
+        updateValidationUI('checking');
+        updateSubmitState();
+        validationTimeout = setTimeout(() => verifyWordAPI(sanitized), 300);
+      }
+    });
+
+    // Real-time calculations and board preview placements
+    function processWord(word, isNetworkIncoming = false) {
+      // Clear all previews/collisions from board
+      const cells = boardEl.querySelectorAll('.board-cell');
+      cells.forEach(cell => {
+        cell.classList.remove('preview-cell', 'conflict-cell');
+        const previewTile = cell.querySelector('.preview-tile');
+        if (previewTile) {
+          cell.removeChild(previewTile);
+        }
+      });
+
+      validationAlertEl.style.display = 'none';
+      state.hasCollisionOrBoundaryError = false;
+
+      // Broadcast preview letters to opponent in multiplayer
+      if (state.isMultiplayer && !isNetworkIncoming) {
+        state.conn.send({
+          type: 'preview',
+          word: word,
+          direction: state.direction,
+          selectedCell: state.selectedCell
+        });
+      }
+
+      if (!word) {
+        wordScoreVal.textContent = '0';
+        cipherOutput.textContent = 'AWAITING INPUT...';
+        state.currentWordPoints = 0;
+        state.currentEncryptedWord = '';
+        return;
+      }
+
+      const start = state.selectedCell;
+      let isVert = state.direction === 'vertical';
+      let boundaryError = false;
+      let collisionCell = null;
+      let collisionMsg = '';
+
+      let wordMultiplier = 1;
+      let sumOfLetters = 0;
+      let cipherText = '';
+
+      // Validate letter alignments and check score multipliers
+      for (let i = 0; i < word.length; i++) {
+        const char = word[i];
+        
+        const r = start.row + (isVert ? i : 0);
+        const c = start.col + (isVert ? 0 : i);
+
+        // Caesar encryption ROT-3
+        const shiftedCode = ((char.charCodeAt(0) - 65 + 3) % 26) + 65;
+        const cipherChar = String.fromCharCode(shiftedCode);
+        cipherText += cipherChar;
+
+        // Check board boundary limits
+        if (r >= 15 || c >= 15) {
+          boundaryError = true;
+          continue;
+        }
+
+        const cellEl = boardEl.querySelector(`.board-cell[data-row="${r}"][data-col="${c}"]`);
+        const existingItem = state.grid[r][c];
+        const letterScore = SCRABBLE_VALUES[char] || 0;
+
+        if (existingItem) {
+          // Collision Check
+          if (existingItem.letter !== char) {
+            collisionCell = cellEl;
+            collisionMsg = `Letter Collision at ${String.fromCharCode(65 + c)}${r + 1}: expected ${existingItem.letter}`;
+            cellEl.classList.add('conflict-cell');
+          } else {
+            // Reused tile: Add plain face value score
+            sumOfLetters += letterScore;
+            cellEl.classList.add('preview-cell');
+          }
+        } else {
+          // New Tile: Compute board multiplier values
+          cellEl.classList.add('preview-cell');
+          
+          const type = getCellType(r, c);
+          let itemVal = letterScore;
+
+          if (type === 'dl') {
+            itemVal = letterScore * 2;
+          } else if (type === 'tl') {
+            itemVal = letterScore * 3;
+          } else if (type === 'dw' || type === 'star') {
+            wordMultiplier *= 2;
+          } else if (type === 'tw') {
+            wordMultiplier *= 3;
+          }
+
+          sumOfLetters += itemVal;
+
+          // Inject visual preview tile wrapper
+          const wrapper = document.createElement('div');
+          wrapper.className = 'tile-wrapper preview-tile';
+          const isCipher = viewModeToggle.checked;
+          const cipheredClass = isCipher ? ' ciphered' : '';
+          wrapper.innerHTML = `
+            <div class="tile-card${cipheredClass}">
+              <div class="tile-face tile-front">
+                ${char}
+                <span class="tile-score">${letterScore}</span>
+              </div>
+              <div class="tile-face tile-back">${cipherChar}</div>
+            </div>
+          `;
+          cellEl.appendChild(wrapper);
+        }
+      }
+
+      state.currentEncryptedWord = cipherText;
+      cipherOutput.textContent = cipherText;
+
+      // Handle Errors displays
+      if (boundaryError) {
+        validationAlertEl.textContent = 'Word goes off the board boundaries! ✗';
+        validationAlertEl.style.display = 'block';
+        state.hasCollisionOrBoundaryError = true;
+        wordScoreVal.textContent = '0';
+        state.currentWordPoints = 0;
+        updateSubmitState();
+        return;
+      }
+
+      if (collisionCell) {
+        validationAlertEl.textContent = collisionMsg;
+        validationAlertEl.style.display = 'block';
+        state.hasCollisionOrBoundaryError = true;
+        wordScoreVal.textContent = '0';
+        state.currentWordPoints = 0;
+        updateSubmitState();
+        return;
+      }
+
+      const finalScore = sumOfLetters * wordMultiplier;
+      state.currentWordPoints = finalScore;
+      wordScoreVal.textContent = finalScore;
+      
+      updateSubmitState();
+    }
+
+    // Submit word permanent commit placement
+    submitBtn.addEventListener('click', () => {
+      submitCurrentWord();
+    });
+
+    wordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !submitBtn.disabled) {
+        submitCurrentWord();
+      }
+    });
+
+    function submitCurrentWord() {
+      const word = wordInput.value;
+      if (!word || state.hasCollisionOrBoundaryError || !isMyTurn()) return;
+
+      const activePlayerObj = state.activePlayer === 1 ? state.player1 : state.player2;
+      
+      activePlayerObj.score += state.currentWordPoints;
+
+      // Place permanently into our grid matrix
+      const start = state.selectedCell;
+      const isVert = state.direction === 'vertical';
+      for (let i = 0; i < word.length; i++) {
+        const r = start.row + (isVert ? i : 0);
+        const c = start.col + (isVert ? 0 : i);
+        
+        state.grid[r][c] = {
+          letter: word[i],
+          isPermanent: true,
+          placedBy: state.activePlayer
+        };
+      }
+
+      // Log to history
+      const startCoord = `${String.fromCharCode(65 + start.col)}${start.row + 1}`;
+      state.history.unshift({
+        playerName: activePlayerObj.name,
+        playerIdx: state.activePlayer,
+        word: word,
+        encrypted: state.currentEncryptedWord,
+        score: state.currentWordPoints,
+        info: `${startCoord} [${state.direction === 'vertical' ? 'V' : 'H'}]`
+      });
+
+      // Turn alternations
+      state.activePlayer = state.activePlayer === 1 ? 2 : 1;
+
+      // Broadcast sync packet to peer in multiplayer
+      if (state.isMultiplayer) {
+        state.conn.send({
+          type: 'sync-state',
+          grid: state.grid,
+          player1Score: state.player1.score,
+          player2Score: state.player2.score,
+          activePlayer: state.activePlayer,
+          history: state.history
+        });
+      }
+
+      // Reset Builder panels
+      wordInput.value = '';
+      state.isWordValid = false;
+      state.isValidating = false;
+      
+      // Refresh Displays
+      renderBoardGrid();
+      processWord('');
+      updateValidationUI('pending');
+      updateSubmitState();
+      updateUI();
+      
+      wordInput.focus();
+      startTurnTimer(); // Restart timer for the next player
+    }
+
+    // Turn Timer Control Functions
+    function startTurnTimer() {
+      clearInterval(state.timerInterval);
+      state.timerValue = 60.0;
+      updateTimerUI();
+
+      state.timerInterval = setInterval(() => {
+        state.timerValue -= 0.1;
+        if (state.timerValue <= 0) {
+          state.timerValue = 0;
+          updateTimerUI();
+          clearInterval(state.timerInterval);
+          handleTurnTimeout();
+        } else {
+          updateTimerUI();
+        }
+      }, 100);
+    }
+
+    function stopTurnTimer() {
+      clearInterval(state.timerInterval);
+    }
+
+    function updateTimerUI() {
+      if (!turnTimerEl || !timerProgressEl || !timerPulseEl) return;
+      
+      // Update text
+      turnTimerEl.textContent = `${state.timerValue.toFixed(1)}s`;
+      
+      // Update progress bar width
+      const pct = (state.timerValue / 60.0) * 100;
+      timerProgressEl.style.width = `${pct}%`;
+
+      // Visual alerting on low time (< 15 seconds)
+      if (state.timerValue < 15.0) {
+        timerPulseEl.style.background = '#ef4444';
+        turnTimerEl.style.color = '#ef4444';
+        timerProgressEl.style.background = 'linear-gradient(90deg, #ef4444, #b91c1c)';
+        
+        // Rapid pulsing when time is low
+        timerPulseEl.style.animationDuration = '0.5s';
+      } else {
+        timerPulseEl.style.background = 'var(--accent-green)';
+        turnTimerEl.style.color = 'var(--text-main)';
+        timerProgressEl.style.background = 'linear-gradient(90deg, var(--secondary), var(--primary))';
+        timerPulseEl.style.animationDuration = '1.5s';
+      }
+    }
+
+    function handleTurnTimeout() {
+      // Only the active player triggers the timeout commit
+      if (!isMyTurn()) return;
+
+      // Notice to player
+      alert("Transmission Window Closed: Your turn has been forfeited.");
+
+      // Reset local word builder
+      wordInput.value = '';
+      processWord('');
+      state.isWordValid = false;
+      state.isValidating = false;
+
+      // Toggle Active turn
+      state.activePlayer = state.activePlayer === 1 ? 2 : 1;
+
+      // Sync state if multiplayer
+      if (state.isMultiplayer) {
+        state.conn.send({
+          type: 'sync-state',
+          grid: state.grid,
+          player1Score: state.player1.score,
+          player2Score: state.player2.score,
+          activePlayer: state.activePlayer,
+          history: state.history
+        });
+      }
+
+      // Re-render
+      renderBoardGrid();
+      updateValidationUI('pending');
+      updateSubmitState();
+      updateUI();
+      
+      startTurnTimer();
+    }
+
+    // Start Local Game
+    startBtn.addEventListener('click', () => {
+      cleanupNetwork();
+      
+      const p1Val = player1Input.value.trim();
+      const p2Val = player2Input.value.trim();
+
+      state.player1.name = p1Val || 'Player 1';
+      state.player2.name = p2Val || 'Player 2';
+      state.player1.score = 0;
+      state.player2.score = 0;
+      state.activePlayer = 1;
+      state.history = [];
+      state.grid = Array(15).fill(null).map(() => Array(15).fill(null));
+      state.selectedCell = { row: 7, col: 7 };
+      state.direction = 'horizontal';
+      state.isWordValid = false;
+      state.isValidating = false;
+
+      initBoard();
+      handleCellClick(7, 7);
+      updateUI();
+      transitionScreens(setupScreen, gameScreen);
+      startTurnTimer();
+    });
+
+    // Screen transition animator
+    function transitionScreens(fromScreen, toScreen) {
+      fromScreen.style.opacity = '0';
+      fromScreen.style.transform = 'translateY(-20px)';
+      setTimeout(() => {
+        fromScreen.classList.remove('active');
+        toScreen.classList.add('active');
+        toScreen.offsetHeight;
+        toScreen.style.opacity = '1';
+        toScreen.style.transform = 'translateY(0)';
+      }, 300);
+    }
+
+    // Clear Button
+    clearBtn.addEventListener('click', () => {
+      if (!isMyTurn()) return;
+      wordInput.value = '';
+      processWord('');
+      state.isWordValid = false;
+      state.isValidating = false;
+      updateValidationUI('pending');
+      updateSubmitState();
+      wordInput.focus();
+    });
+
+    // Reset Game
+    resetBtn.addEventListener('click', () => {
+      if (confirm('Reset scores, clear the board and start a new session?')) {
+        // Broadcast reset to peer in multiplayer
+        if (state.isMultiplayer) {
+          state.conn.send({ type: 'game-reset' });
+        }
+        
+        state.player1.score = 0;
+        state.player2.score = 0;
+        state.activePlayer = 1;
+        state.history = [];
+        state.grid = Array(15).fill(null).map(() => Array(15).fill(null));
+        state.selectedCell = { row: 7, col: 7 };
+        wordInput.value = '';
+        initBoard();
+        handleCellClick(7, 7);
+        updateUI();
+        startTurnTimer();
+      }
+    });
+
+    // End Game
+    endBtn.addEventListener('click', () => {
+      announceWinner();
+    });
+
+    function updateUI() {
+      // Names
+      p1Name.textContent = state.player1.name;
+      p2Name.textContent = state.player2.name;
+
+      // Scores
+      p1Score.innerHTML = `${state.player1.score}<span>PTS</span>`;
+      p2Score.innerHTML = `${state.player2.score}<span>PTS</span>`;
+
+      // Highlight turn cards
+      if (state.activePlayer === 1) {
+        p1Card.className = 'player-card active-p1';
+        p2Card.className = 'player-card';
+      } else {
+        p1Card.className = 'player-card';
+        p2Card.className = 'player-card active-p2';
+      }
+
+      // History Feed
+      historyBadge.textContent = state.history.length;
+      if (state.history.length === 0) {
+        historyList.innerHTML = '<li class="history-empty">No transmissions sent yet.</li>';
+      } else {
+        historyList.innerHTML = state.history.map(item => `
+          <li class="history-item">
+            <div class="history-words">
+              <div>
+                <span class="history-player-badge hp-${item.playerIdx}">${item.playerName}</span>
+                <span class="history-words-orig">${item.word}</span>
+                <span style="font-size:0.7rem; color:var(--text-muted); margin-left:0.25rem;">@ ${item.info}</span>
+              </div>
+              <span class="history-words-enc">➔ ${item.encrypted}</span>
+            </div>
+            <div class="history-pts">+${item.score} PTS</div>
+          </li>
+        `).join('');
+      }
+
+      // Lock input box controls based on turn permissions
+      const activeTurn = isMyTurn();
+      wordInput.disabled = !activeTurn;
+      wordInput.placeholder = activeTurn ? "TYPE LETTERS..." : "WAITING FOR OPPONENT'S TURN...";
+      
+      // Update validation UI if input was locked/unlocked
+      if (!wordInput.value) {
+        updateValidationUI(activeTurn ? 'pending' : 'pending');
+      }
+      
+      updateSubmitState();
+    }
+
+    // Modal & Rematch Controls
+    function announceWinner(isNetworkBypass = false) {
+      stopTurnTimer();
+      // Broadcast end game to peer in multiplayer
+      if (state.isMultiplayer && !isNetworkBypass) {
+        state.conn.send({ type: 'game-over' });
+      }
+
+      let heading = '';
+      const p1 = state.player1;
+      const p2 = state.player2;
+
+      if (p1.score > p2.score) {
+        heading = `${p1.name} wins!`;
+      } else if (p2.score > p1.score) {
+        heading = `${p2.name} wins!`;
+      } else {
+        heading = "It's a draw!";
+      }
+
+      winnerHeading.textContent = heading.toUpperCase();
+      
+      winnerLbl1.textContent = `${p1.name}:`;
+      winnerVal1.textContent = `${p1.score} PTS`;
+      winnerLbl2.textContent = `${p2.name}:`;
+      winnerVal2.textContent = `${p2.score} PTS`;
+
+      winnerModal.classList.add('active');
+      startConfetti();
+    }
+
+    rematchBtn.addEventListener('click', () => {
+      stopConfetti();
+      cleanupNetwork();
+      winnerModal.classList.remove('active');
+      transitionScreens(gameScreen, setupScreen);
+    });
+
+    // Local Confetti Engine
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    
+    window.addEventListener('resize', resizeCanvas);
+
+    function startConfetti() {
+      resizeCanvas();
+      confettiActive = true;
+      particles = [];
+      for (let i = 0; i < 120; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height - canvas.height,
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          speedX: Math.random() * 4 - 2,
+          speedY: Math.random() * 5 + 3,
+          rotation: Math.random() * 360,
+          rotationSpeed: Math.random() * 5 - 2.5
+        });
+      }
+      animateConfetti();
+    }
+
+    function animateConfetti() {
+      if (!confettiActive) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      particles.forEach(p => {
+        p.y += p.speedY;
+        p.x += p.speedX;
+        p.rotation += p.rotationSpeed;
+
+        if (p.y > canvas.height) {
+          p.y = -20;
+          p.x = Math.random() * canvas.width;
+        }
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation * Math.PI / 180);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+      });
+
+      requestAnimationFrame(animateConfetti);
+    }
+
+    function stopConfetti() {
+      confettiActive = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles = [];
+    }
+
+    // Clean up network and notify peer immediately when page is closed/refreshed
+    window.addEventListener('beforeunload', () => {
+      cleanupNetwork();
+    });
+  </script>
+</body>
+</html>
