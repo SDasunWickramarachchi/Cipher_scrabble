@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9302449026696360"
-     crossorigin="anonymous"></script>
+  
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9302449026696360" crossorigin="anonymous"></script>
   
   <style>
     /* Design Tokens */
@@ -870,7 +870,7 @@
       padding: 1rem;
       text-align: center;
       position: relative;
-      min-height: 90px;
+      min-height: 120px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -887,21 +887,7 @@
       text-transform: uppercase;
       color: var(--text-muted);
       letter-spacing: 0.05em;
-    }
-
-    .ad-fallback-content {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-    
-    .ad-fallback-content a {
-      color: var(--primary);
-      text-decoration: none;
-      font-weight: 600;
-    }
-
-    .ad-fallback-content a:hover {
-      text-decoration: underline;
+      z-index: 10;
     }
   </style>
 </head>
@@ -972,20 +958,17 @@
         </div>
       </div>
 
-      <div class="ad-wrapper" style="margin-top: 2rem;">
-        <span class="ad-label">Sponsor Advertisement</span>
+      <div class="ad-wrapper">
+        <span class="ad-label">Advertisement</span>
         <ins class="adsbygoogle"
-             style="display:block; width:100%; min-height:90px;"
+             style="display:block; width:100%;"
              data-ad-client="ca-pub-9302449026696360"
-             data-ad-slot="4163942026"
+             data-ad-slot="5905001743"
              data-ad-format="auto"
              data-full-width-responsive="true"></ins>
         <script>
              (adsbygoogle = window.adsbygoogle || []).push({});
         </script>
-        <div class="ad-fallback-content">
-          Looking for expert web & crypto development? Hire <a href="mailto:sashika@example.com">Sashika Dasun Wickramarachchi</a>.
-        </div>
       </div>
     </div>
 
@@ -1012,8 +995,7 @@
             </div>
           </div>
           
-          <div id="board" class="board-container cipher-view">
-            </div>
+          <div id="board" class="board-container cipher-view"></div>
         </div>
 
         <div class="right-section">
@@ -1102,20 +1084,17 @@
         </div>
       </div>
 
-      <div class="ad-wrapper" style="margin-top: 2rem;">
-        <span class="ad-label">Sponsor Advertisement</span>
+      <div class="ad-wrapper">
+        <span class="ad-label">Advertisement</span>
         <ins class="adsbygoogle"
-             style="display:block; width:100%; min-height:90px;"
+             style="display:block; width:100%;"
              data-ad-client="ca-pub-9302449026696360"
-             data-ad-slot="4163942026"
+             data-ad-slot="5905001743"
              data-ad-format="auto"
              data-full-width-responsive="true"></ins>
         <script>
              (adsbygoogle = window.adsbygoogle || []).push({});
         </script>
-        <div class="ad-fallback-content">
-          Looking for expert web & crypto development? Hire <a href="mailto:sashika@example.com">Sashika Dasun Wickramarachchi</a>.
-        </div>
       </div>
     </div>
   </div>
@@ -1142,7 +1121,7 @@
   </div>
 
   <footer>
-    Crypto-Scrabble &copy; 2026. Developed by Sashika Dasun Wickramarachchi. Built with pure Vanilla JS.
+    Crypto-Scrabble &copy; 2026. Built with pure Vanilla JS.
   </footer>
 
   <script>
@@ -1200,7 +1179,6 @@
       player2: { name: 'Bob', score: 0 },
       activePlayer: 1, // 1 or 2
       history: [],
-      // Grid letter database stores elements as { letter: char, isPermanent: bool, placedBy: num }
       grid: Array(15).fill(null).map(() => Array(15).fill(null)),
       selectedCell: { row: 7, col: 7 }, // H8 center by default
       direction: 'horizontal', // 'horizontal' or 'vertical'
@@ -1392,12 +1370,10 @@
     });
 
     function setupMultiplayerConnection() {
-      // Handlers for data exchanges
       state.conn.on('open', () => {
         console.log('Data connection established.');
         state.isMultiplayer = true;
         
-        // Handshake player name to opponent
         state.conn.send({
           type: 'handshake',
           name: onlineNameInput.value.trim() || (state.myRole === 'host' ? 'Host' : 'Guest')
@@ -1409,7 +1385,6 @@
         
         if (data.type === 'handshake') {
           if (state.myRole === 'host') {
-            // Host assigns names and initial state
             state.player1.name = onlineNameInput.value.trim() || 'Host';
             state.player2.name = data.name;
             state.player1.score = 0;
@@ -1420,19 +1395,16 @@
             state.selectedCell = { row: 7, col: 7 };
             state.direction = 'horizontal';
 
-            // Send full initial game parameters to Joiner
             state.conn.send({
               type: 'init-game',
               player1Name: state.player1.name,
               player2Name: state.player2.name
             });
 
-            // Start locally
             startOnlineGame();
           }
         } 
         else if (data.type === 'init-game') {
-          // Joiner gets setup parameters
           state.player1.name = data.player1Name;
           state.player2.name = data.player2Name;
           state.player1.score = 0;
@@ -1446,11 +1418,9 @@
           startOnlineGame();
         }
         else if (data.type === 'preview') {
-          // Sync typing previews on opponent board
           state.direction = data.direction;
           state.selectedCell = data.selectedCell;
           
-          // Re-render coordinate displays visually
           const colLetter = String.fromCharCode(65 + data.selectedCell.col);
           selectedCoordinateEl.textContent = `${colLetter}${data.selectedCell.row + 1}`;
           
@@ -1462,17 +1432,15 @@
             dirVertBtn.classList.add('active');
           }
 
-          processWord(data.word, true); // True skips local broadcast triggers
+          processWord(data.word, true);
         }
         else if (data.type === 'sync-state') {
-          // Update game board states
           state.grid = data.grid;
           state.player1.score = data.player1Score;
           state.player2.score = data.player2Score;
           state.activePlayer = data.activePlayer;
           state.history = data.history;
 
-          // Clear builder local previews
           wordInput.value = '';
           processWord('');
           updateValidationUI('pending');
@@ -1484,7 +1452,6 @@
           startTurnTimer();
         }
         else if (data.type === 'game-reset') {
-          // Remote reset triggered
           state.player1.score = 0;
           state.player2.score = 0;
           state.activePlayer = 1;
@@ -1498,8 +1465,7 @@
           startTurnTimer();
         }
         else if (data.type === 'game-over') {
-          // Remote end-game triggered
-          announceWinner(true); // skips broad target loop
+          announceWinner(true);
         }
         else if (data.type === 'opponent-disconnect') {
           handleDisconnection();
@@ -1567,25 +1533,21 @@
       });
     }
 
-    // Helper to evaluate if it is currently our device's turn
     function isMyTurn() {
-      if (!state.isMultiplayer) return true; // Local play allows everyone to type
+      if (!state.isMultiplayer) return true;
       if (state.myRole === 'host' && state.activePlayer === 1) return true;
       if (state.myRole === 'joiner' && state.activePlayer === 2) return true;
       return false;
     }
 
-    // Helper to identify if a given player is the relevant local user for decryption
     function isRelevantPlayer(playerIndex) {
       if (state.isMultiplayer) {
         if (state.myRole === 'host') return playerIndex === 1;
         if (state.myRole === 'joiner') return playerIndex === 2;
       }
-      // Local pass & play: current active player is the relevant player
       return playerIndex === state.activePlayer;
     }
 
-    // Setup board elements once
     function initBoard() {
       boardEl.innerHTML = '';
       for (let r = 0; r < 15; r++) {
@@ -1611,7 +1573,7 @@
           }
           
           cell.addEventListener('click', () => {
-            if (!isMyTurn()) return; // Lock selections if it is not our turn
+            if (!isMyTurn()) return;
             handleCellClick(r, c);
           });
           boardEl.appendChild(cell);
@@ -1662,7 +1624,6 @@
           const cipherText = String.fromCharCode(((letter.charCodeAt(0) - 65 + 3) % 26) + 65);
           const score = SCRABBLE_VALUES[letter] || 0;
           
-          // Determine if this tile card should be ciphered (flipped to back face)
           const isCipher = viewModeToggle.checked;
           const isRelevant = item.placedBy ? isRelevantPlayer(item.placedBy) : false;
           const shouldCipher = isCipher || !isRelevant;
@@ -1684,7 +1645,6 @@
       });
     }
 
-    // Toggle board view
     viewModeToggle.addEventListener('change', () => {
       const isCipher = viewModeToggle.checked;
       if (isCipher) {
@@ -1700,7 +1660,6 @@
       processWord(wordInput.value);
     });
 
-    // Segmented directions button togglers
     dirHorizBtn.addEventListener('click', () => {
       if (!isMyTurn()) return;
       state.direction = 'horizontal';
@@ -1717,7 +1676,6 @@
       processWord(wordInput.value);
     });
 
-    // Update validation status badge visual UI
     function updateValidationUI(status) {
       const valBadge = document.getElementById('validation-status');
       if (!valBadge) return;
@@ -1741,7 +1699,6 @@
       }
     }
 
-    // Fetch validation from English dictionary API
     async function verifyWordAPI(word) {
       if (!word) return;
       state.isValidating = true;
@@ -1772,7 +1729,6 @@
       }
     }
 
-    // Toggle submit button state depending on validity
     function updateSubmitState() {
       const word = wordInput.value;
       if (!word || state.hasCollisionOrBoundaryError || state.isValidating || !isMyTurn()) {
@@ -1782,7 +1738,6 @@
       submitBtn.disabled = !state.isWordValid;
     }
 
-    // Word Sanitization & Calculations
     let validationTimeout = null;
     wordInput.addEventListener('input', (e) => {
       if (!isMyTurn()) return;
@@ -1811,9 +1766,7 @@
       }
     });
 
-    // Real-time calculations and board preview placements
     function processWord(word, isNetworkIncoming = false) {
-      // Clear all previews/collisions from board
       const cells = boardEl.querySelectorAll('.board-cell');
       cells.forEach(cell => {
         cell.classList.remove('preview-cell', 'conflict-cell');
@@ -1826,7 +1779,6 @@
       validationAlertEl.style.display = 'none';
       state.hasCollisionOrBoundaryError = false;
 
-      // Broadcast preview letters to opponent in multiplayer
       if (state.isMultiplayer && !isNetworkIncoming) {
         state.conn.send({
           type: 'preview',
@@ -1854,19 +1806,16 @@
       let sumOfLetters = 0;
       let cipherText = '';
 
-      // Validate letter alignments and check score multipliers
       for (let i = 0; i < word.length; i++) {
         const char = word[i];
         
         const r = start.row + (isVert ? i : 0);
         const c = start.col + (isVert ? 0 : i);
 
-        // Caesar encryption ROT-3
         const shiftedCode = ((char.charCodeAt(0) - 65 + 3) % 26) + 65;
         const cipherChar = String.fromCharCode(shiftedCode);
         cipherText += cipherChar;
 
-        // Check board boundary limits
         if (r >= 15 || c >= 15) {
           boundaryError = true;
           continue;
@@ -1877,18 +1826,15 @@
         const letterScore = SCRABBLE_VALUES[char] || 0;
 
         if (existingItem) {
-          // Collision Check
           if (existingItem.letter !== char) {
             collisionCell = cellEl;
             collisionMsg = `Letter Collision at ${String.fromCharCode(65 + c)}${r + 1}: expected ${existingItem.letter}`;
             cellEl.classList.add('conflict-cell');
           } else {
-            // Reused tile: Add plain face value score
             sumOfLetters += letterScore;
             cellEl.classList.add('preview-cell');
           }
         } else {
-          // New Tile: Compute board multiplier values
           cellEl.classList.add('preview-cell');
           
           const type = getCellType(r, c);
@@ -1906,7 +1852,6 @@
 
           sumOfLetters += itemVal;
 
-          // Inject visual preview tile wrapper
           const wrapper = document.createElement('div');
           wrapper.className = 'tile-wrapper preview-tile';
           const isCipher = viewModeToggle.checked;
@@ -1927,7 +1872,6 @@
       state.currentEncryptedWord = cipherText;
       cipherOutput.textContent = cipherText;
 
-      // Handle Errors displays
       if (boundaryError) {
         validationAlertEl.textContent = 'Word goes off the board boundaries! ✗';
         validationAlertEl.style.display = 'block';
@@ -1955,7 +1899,6 @@
       updateSubmitState();
     }
 
-    // Submit word permanent commit placement
     submitBtn.addEventListener('click', () => {
       submitCurrentWord();
     });
@@ -1971,10 +1914,8 @@
       if (!word || state.hasCollisionOrBoundaryError || !isMyTurn()) return;
 
       const activePlayerObj = state.activePlayer === 1 ? state.player1 : state.player2;
-      
       activePlayerObj.score += state.currentWordPoints;
 
-      // Place permanently into our grid matrix
       const start = state.selectedCell;
       const isVert = state.direction === 'vertical';
       for (let i = 0; i < word.length; i++) {
@@ -1988,7 +1929,6 @@
         };
       }
 
-      // Log to history
       const startCoord = `${String.fromCharCode(65 + start.col)}${start.row + 1}`;
       state.history.unshift({
         playerName: activePlayerObj.name,
@@ -1999,10 +1939,8 @@
         info: `${startCoord} [${state.direction === 'vertical' ? 'V' : 'H'}]`
       });
 
-      // Turn alternations
       state.activePlayer = state.activePlayer === 1 ? 2 : 1;
 
-      // Broadcast sync packet to peer in multiplayer
       if (state.isMultiplayer) {
         state.conn.send({
           type: 'sync-state',
@@ -2014,12 +1952,10 @@
         });
       }
 
-      // Reset Builder panels
       wordInput.value = '';
       state.isWordValid = false;
       state.isValidating = false;
       
-      // Refresh Displays
       renderBoardGrid();
       processWord('');
       updateValidationUI('pending');
@@ -2027,10 +1963,9 @@
       updateUI();
       
       wordInput.focus();
-      startTurnTimer(); // Restart timer for the next player
+      startTurnTimer();
     }
 
-    // Turn Timer Control Functions
     function startTurnTimer() {
       clearInterval(state.timerInterval);
       state.timerValue = 60.0;
@@ -2056,20 +1991,15 @@
     function updateTimerUI() {
       if (!turnTimerEl || !timerProgressEl || !timerPulseEl) return;
       
-      // Update text
       turnTimerEl.textContent = `${state.timerValue.toFixed(1)}s`;
       
-      // Update progress bar width
       const pct = (state.timerValue / 60.0) * 100;
       timerProgressEl.style.width = `${pct}%`;
 
-      // Visual alerting on low time (< 15 seconds)
       if (state.timerValue < 15.0) {
         timerPulseEl.style.background = '#ef4444';
         turnTimerEl.style.color = '#ef4444';
         timerProgressEl.style.background = 'linear-gradient(90deg, #ef4444, #b91c1c)';
-        
-        // Rapid pulsing when time is low
         timerPulseEl.style.animationDuration = '0.5s';
       } else {
         timerPulseEl.style.background = 'var(--accent-green)';
@@ -2080,22 +2010,17 @@
     }
 
     function handleTurnTimeout() {
-      // Only the active player triggers the timeout commit
       if (!isMyTurn()) return;
 
-      // Notice to player
       alert("Transmission Window Closed: Your turn has been forfeited.");
 
-      // Reset local word builder
       wordInput.value = '';
       processWord('');
       state.isWordValid = false;
       state.isValidating = false;
 
-      // Toggle Active turn
       state.activePlayer = state.activePlayer === 1 ? 2 : 1;
 
-      // Sync state if multiplayer
       if (state.isMultiplayer) {
         state.conn.send({
           type: 'sync-state',
@@ -2107,7 +2032,6 @@
         });
       }
 
-      // Re-render
       renderBoardGrid();
       updateValidationUI('pending');
       updateSubmitState();
@@ -2116,7 +2040,6 @@
       startTurnTimer();
     }
 
-    // Start Local Game
     startBtn.addEventListener('click', () => {
       cleanupNetwork();
       
@@ -2142,7 +2065,6 @@
       startTurnTimer();
     });
 
-    // Screen transition animator
     function transitionScreens(fromScreen, toScreen) {
       fromScreen.style.opacity = '0';
       fromScreen.style.transform = 'translateY(-20px)';
@@ -2155,7 +2077,6 @@
       }, 300);
     }
 
-    // Clear Button
     clearBtn.addEventListener('click', () => {
       if (!isMyTurn()) return;
       wordInput.value = '';
@@ -2167,10 +2088,8 @@
       wordInput.focus();
     });
 
-    // Reset Game
     resetBtn.addEventListener('click', () => {
       if (confirm('Reset scores, clear the board and start a new session?')) {
-        // Broadcast reset to peer in multiplayer
         if (state.isMultiplayer) {
           state.conn.send({ type: 'game-reset' });
         }
@@ -2189,21 +2108,17 @@
       }
     });
 
-    // End Game
     endBtn.addEventListener('click', () => {
       announceWinner();
     });
 
     function updateUI() {
-      // Names
       p1Name.textContent = state.player1.name;
       p2Name.textContent = state.player2.name;
 
-      // Scores
       p1Score.innerHTML = `${state.player1.score}<span>PTS</span>`;
       p2Score.innerHTML = `${state.player2.score}<span>PTS</span>`;
 
-      // Highlight turn cards
       if (state.activePlayer === 1) {
         p1Card.className = 'player-card active-p1';
         p2Card.className = 'player-card';
@@ -2212,7 +2127,6 @@
         p2Card.className = 'player-card active-p2';
       }
 
-      // History Feed
       historyBadge.textContent = state.history.length;
       if (state.history.length === 0) {
         historyList.innerHTML = '<li class="history-empty">No transmissions sent yet.</li>';
@@ -2232,23 +2146,19 @@
         `).join('');
       }
 
-      // Lock input box controls based on turn permissions
       const activeTurn = isMyTurn();
       wordInput.disabled = !activeTurn;
       wordInput.placeholder = activeTurn ? "TYPE LETTERS..." : "WAITING FOR OPPONENT'S TURN...";
       
-      // Update validation UI if input was locked/unlocked
       if (!wordInput.value) {
-        updateValidationUI(activeTurn ? 'pending' : 'pending');
+        updateValidationUI('pending');
       }
       
       updateSubmitState();
     }
 
-    // Modal & Rematch Controls
     function announceWinner(isNetworkBypass = false) {
       stopTurnTimer();
-      // Broadcast end game to peer in multiplayer
       if (state.isMultiplayer && !isNetworkBypass) {
         state.conn.send({ type: 'game-over' });
       }
@@ -2283,7 +2193,6 @@
       transitionScreens(gameScreen, setupScreen);
     });
 
-    // Local Confetti Engine
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -2341,7 +2250,6 @@
       particles = [];
     }
 
-    // Clean up network and notify peer immediately when page is closed/refreshed
     window.addEventListener('beforeunload', () => {
       cleanupNetwork();
     });
